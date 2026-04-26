@@ -707,7 +707,19 @@ function render(){
     dn.className='cn'+(dow===0||hname?' sun':dow===6?' sat':'')+(isTod?' tod':'');
     dn.textContent=cd;div.appendChild(dn);
     if(hname){let hl=document.createElement('div');hl.style.cssText='font-size:7px;color:var(--r);line-height:1.1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 1px';hl.textContent=hname;div.appendChild(hl);}
-    if(c.cur){let _k=key,_y=cy2,_m=cm,_d=cd;div.onclick=function(){clickDay(_k,_y,_m,_d)};}
+    if(c.cur){
+      let de=data.filter(e=>e.date===key);
+      let hasInc=de.some(e=>e.type==='inc');
+      let hasExp=de.some(e=>e.type==='exp');
+      if(hasInc||hasExp){
+        let dotRow=document.createElement('div');
+        dotRow.style.cssText='display:flex;gap:3px;justify-content:center;margin-top:3px';
+        if(hasInc){let d=document.createElement('div');d.style.cssText='width:7px;height:7px;border-radius:50%;background:#1D9E75';dotRow.appendChild(d);}
+        if(hasExp){let d=document.createElement('div');d.style.cssText='width:7px;height:7px;border-radius:50%;background:#E24B4A';dotRow.appendChild(d);}
+        div.appendChild(dotRow);
+      }
+      let _k=key,_y=cy2,_m=cm,_d=cd;div.onclick=function(){clickDay(_k,_y,_m,_d)};
+    }
     g.appendChild(div);
   });
 
