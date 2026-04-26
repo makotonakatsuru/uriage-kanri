@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>売上・仕入管理</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f5f0;
+    --surface: #ffffff;
+    --border: rgba(0,0,0,0.08);
+    --border-med: rgba(0,0,0,0.15);
+    --text: #1a1a1a;
+    --text-sub: #666;
+    --text-hint: #999;
+    --income: #1D9E75;
+    --income-bg: #E1F5EE;
+    --income-text: #0F6E56;
+    --expense: #D85A30;
+    --expense-bg: #FAECE7;
+    --expense-text: #993C1D;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  header h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
+  header span { font-size: 12px; color: var(--text-hint); }
+
+  .container { max-width: 860px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; margin-bottom: 1.5rem; }
+  .tab { flex: 1; padding: 8px; font-size: 13px; font-weight: 500; font-family: inherit; background: none; border: none; border-radius: calc(var(--radius) - 4px); cursor: pointer; color: var(--text-sub); transition: all 0.15s; text-align: center; }
+  .tab.active { background: var(--text); color: #fff; }
+  .tab:hover:not(.active) { background: var(--bg); color: var(--text); }
+
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* Metrics */
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 1.25rem; }
+  .metric { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; }
+  .metric-label { font-size: 11px; color: var(--text-hint); letter-spacing: 0.05em; margin-bottom: 4px; }
+  .metric-value { font-size: 20px; font-weight: 700; letter-spacing: -0.03em; }
+  .metric-value.income { color: var(--income); }
+  .metric-value.expense { color: var(--expense); }
+  .metric-value.pos { color: var(--income); }
+  .metric-value.neg { color: var(--expense); }
+
+  /* Card */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; }
+  .card-title { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: var(--text-hint); text-transform: uppercase; margin-bottom: 1rem; }
+
+  /* Form */
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group.wide { grid-column: span 2; }
+  label { font-size: 11px; font-weight: 500; color: var(--text-sub); letter-spacing: 0.04em; }
+  input, select {
+    font-family: inherit; font-size: 13px; color: var(--text);
+    background: var(--bg); border: 1px solid var(--border-med);
+    border-radius: var(--radius-sm); padding: 8px 10px;
+    outline: none; transition: border-color 0.15s;
+    width: 100%;
+  }
+  input:focus, select:focus { border-color: var(--text); }
+  .btn { font-family: inherit; font-size: 13px; font-weight: 500; padding: 9px 18px; border-radius: var(--radius-sm); cursor: pointer; transition: all 0.15s; border: none; }
+  .btn-primary { background: var(--text); color: #fff; }
+  .btn-primary:hover { opacity: 0.82; }
+  .btn-outline { background: none; border: 1px solid var(--border-med); color: var(--text); }
+  .btn-outline:hover { background: var(--bg); }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .form-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+
+  /* Table */
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+  .toolbar select { width: auto; flex-shrink: 0; }
+  .toolbar .spacer { flex: 1; }
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: var(--text-hint); border-bottom: 1px solid var(--border); background: var(--bg); white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafaf8; }
+  .del-btn { background: none; border: none; cursor: pointer; color: var(--text-hint); font-size: 13px; padding: 2px 6px; border-radius: 4px; transition: all 0.1s; }
+  .del-btn:hover { color: var(--expense); background: var(--expense-bg); }
+
+  /* Tags */
+  .tag { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 100px; white-space: nowrap; }
+  .tag-income { background: var(--income-bg); color: var(--income-text); }
+  .tag-expense { background: var(--expense-bg); color: var(--expense-text); }
+
+  /* Empty */
+  .empty { text-align: center; padding: 3rem 1rem; color: var(--text-hint); font-size: 13px; }
+
+  /* Charts */
+  .chart-wrap { position: relative; width: 100%; height: 260px; }
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+  .chart-sub-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--text-hint); text-transform: uppercase; margin-bottom: 8px; }
+  .chart-sub-wrap { position: relative; width: 100%; height: 180px; }
+
+  /* File input label */
+  .file-label { display: inline-block; font-family: inherit; font-size: 12px; font-weight: 500; padding: 6px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-med); cursor: pointer; transition: all 0.15s; }
+  .file-label:hover { background: var(--bg); }
+
+  @media (max-width: 540px) {
+    .form-group.wide { grid-column: span 1; }
+    .chart-grid { grid-template-columns: 1fr; }
+    .metric-value { font-size: 17px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>売上・仕入管理</h1>
+  <span id="header-sub">読み込み中…</span>
+</header>
+
+<div class="container">
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('input', this)">入力</button>
+    <button class="tab" onclick="showTab('list', this)">一覧</button>
+    <button class="tab" onclick="showTab('report', this)">レポート</button>
+  </div>
+
+  <!-- ===== 入力 ===== -->
+  <div id="tab-input" class="section active">
+    <div class="metrics" id="metrics-input"></div>
+    <div class="card">
+      <div class="card-title">新規記録</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>日付</label>
+          <input type="date" id="inp-date">
+        </div>
+        <div class="form-group">
+          <label>種別</label>
+          <select id="inp-type">
+            <option value="income">売上</option>
+            <option value="expense">仕入</option>
+          </select>
+        </div>
+        <div class="form-group wide">
+          <label>内容・取引先</label>
+          <input type="text" id="inp-desc" placeholder="例：商品A 販売">
+        </div>
+        <div class="form-group">
+          <label>金額（円）</label>
+          <input type="number" id="inp-amount" placeholder="0" min="0">
+        </div>
+        <div class="form-group">
+          <label>カテゴリ</label>
+          <input type="text" id="inp-cat" placeholder="例：商品代、交通費">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="addRecord()">追加する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 一覧 ===== -->
+  <div id="tab-list" class="section">
+    <div class="toolbar">
+      <select id="filter-type" onchange="renderList()">
+        <option value="all">すべて</option>
+        <option value="income">売上のみ</option>
+        <option value="expense">仕入のみ</option>
+      </select>
+      <select id="filter-month" onchange="renderList()">
+        <option value="all">全期間</option>
+      </select>
+      <div class="spacer"></div>
+      <button class="btn btn-outline btn-sm" onclick="exportCSV()">CSV 出力</button>
+      <label class="file-label">
+        CSV インポート
+        <input type="file" accept=".csv" style="display:none;" onchange="importCSV(event)">
+      </label>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>日付</th>
+            <th>種別</th>
+            <th>内容</th>
+            <th>カテゴリ</th>
+            <th style="text-align:right;">金額</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="list-body"></tbody>
+      </table>
+      <div id="list-empty" class="empty" style="display:none;">記録がありません</div>
+    </div>
+  </div>
+
+  <!-- ===== レポート ===== -->
+  <div id="tab-report" class="section">
+    <div class="metrics" id="metrics-report"></div>
+    <div class="card" style="margin-top: 1rem;">
+      <div class="card-title">月別 売上・仕入推移</div>
+      <div class="chart-wrap">
+        <canvas id="monthChart" role="img" aria-label="月別売上・仕入棒グラフ">月別の売上と仕入を表示するグラフ</canvas>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="card">
+        <div class="card-title">売上 カテゴリ別</div>
+        <div class="chart-sub-wrap">
+          <canvas id="catIncome" role="img" aria-label="売上カテゴリ円グラフ">売上カテゴリ別の円グラフ</canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">仕入 カテゴリ別</div>
+        <div class="chart-sub-wrap">
+          <canvas id="catExpense" role="img" aria-label="仕入カテゴリ円グラフ">仕入カテゴリ別の円グラフ</canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let records = [];
+let monthChart, catIncomeChart, catExpenseChart;
+
+function today() { return new Date().toISOString().slice(0,10); }
+
+function load() {
+  try { const r = localStorage.getItem('bizRecords2'); if (r) records = JSON.parse(r); } catch(e) {}
+}
+function save() {
+  try { localStorage.setItem('bizRecords2', JSON.stringify(records)); } catch(e) {}
+}
+
+function fmtMoney(n) { return '¥' + Math.round(n).toLocaleString('ja-JP'); }
+
+function addRecord() {
+  const date = document.getElementById('inp-date').value || today();
+  const type = document.getElementById('inp-type').value;
+  const desc = document.getElementById('inp-desc').value.trim();
+  const amount = parseInt(document.getElementById('inp-amount').value) || 0;
+  const cat = document.getElementById('inp-cat').value.trim() || '未分類';
+  if (!desc || amount <= 0) { alert('内容と金額を入力してください'); return; }
+  records.push({ id: Date.now(), date, type, desc, amount, cat });
+  records.sort((a,b) => b.date.localeCompare(a.date));
+  save();
+  document.getElementById('inp-desc').value = '';
+  document.getElementById('inp-amount').value = '';
+  document.getElementById('inp-cat').value = '';
+  renderAll();
+}
+
+function deleteRecord(id) {
+  if (!confirm('この記録を削除しますか？')) return;
+  records = records.filter(r => r.id !== id);
+  save();
+  renderAll();
+}
+
+function renderMetrics(id) {
+  const income = records.filter(r=>r.type==='income').reduce((s,r)=>s+r.amount,0);
+  const expense = records.filter(r=>r.type==='expense').reduce((s,r)=>s+r.amount,0);
+  const profit = income - expense;
+  document.getElementById(id).innerHTML = `
+    <div class="metric"><div class="metric-label">売上合計</div><div class="metric-value income">${fmtMoney(income)}</div></div>
+    <div class="metric"><div class="metric-label">仕入合計</div><div class="metric-value expense">${fmtMoney(expense)}</div></div>
+    <div class="metric"><div class="metric-label">利益</div><div class="metric-value ${profit>=0?'pos':'neg'}">${fmtMoney(profit)}</div></div>
+    <div class="metric"><div class="metric-label">件数</div><div class="metric-value">${records.length}</div></div>
+  `;
+  document.getElementById('header-sub').textContent = `売上 ${fmtMoney(income)} / 利益 ${fmtMoney(profit)}`;
+}
+
+function updateMonthFilter() {
+  const sel = document.getElementById('filter-month');
+  const months = [...new Set(records.map(r=>r.date.slice(0,7)))].sort().reverse();
+  const cur = sel.value;
+  sel.innerHTML = '<option value="all">全期間</option>' + months.map(m=>`<option value="${m}"${m===cur?' selected':''}>${m}</option>`).join('');
+}
+
+function getFiltered() {
+  const ft = document.getElementById('filter-type')?.value || 'all';
+  const fm = document.getElementById('filter-month')?.value || 'all';
+  return records.filter(r => (ft==='all'||r.type===ft) && (fm==='all'||r.date.startsWith(fm)));
+}
+
+function renderList() {
+  updateMonthFilter();
+  const filtered = getFiltered();
+  const body = document.getElementById('list-body');
+  const empty = document.getElementById('list-empty');
+  if (!filtered.length) { body.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display = 'none';
+  body.innerHTML = filtered.map(r => `
+    <tr>
+      <td style="white-space:nowrap;color:var(--text-sub)">${r.date}</td>
+      <td><span class="tag ${r.type==='income'?'tag-income':'tag-expense'}">${r.type==='income'?'売上':'仕入'}</span></td>
+      <td>${r.desc}</td>
+      <td style="color:var(--text-hint)">${r.cat}</td>
+      <td style="text-align:right;font-weight:700;white-space:nowrap">${fmtMoney(r.amount)}</td>
+      <td><button class="del-btn" onclick="deleteRecord(${r.id})">✕</button></td>
+    </tr>
+  `).join('');
+}
+
+function renderCharts() {
+  const months = [...new Set(records.map(r=>r.date.slice(0,7)))].sort();
+  const incD = months.map(m=>records.filter(r=>r.type==='income'&&r.date.startsWith(m)).reduce((s,r)=>s+r.amount,0));
+  const expD = months.map(m=>records.filter(r=>r.type==='expense'&&r.date.startsWith(m)).reduce((s,r)=>s+r.amount,0));
+
+  if (monthChart) monthChart.destroy();
+  monthChart = new Chart(document.getElementById('monthChart').getContext('2d'), {
+    type: 'bar',
+    data: { labels: months, datasets: [
+      { label: '売上', data: incD, backgroundColor: '#5DCAA5', borderRadius: 4 },
+      { label: '仕入', data: expD, backgroundColor: '#F0997B', borderRadius: 4 }
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { font:{size:12}, usePointStyle:true, pointStyle:'rect' } } },
+      scales: {
+        y: { ticks: { callback: v=>'¥'+v.toLocaleString('ja-JP') }, grid: { color:'rgba(0,0,0,0.05)' } },
+        x: { ticks: { autoSkip:false, maxRotation:45 }, grid: { display:false } }
+      }
+    }
+  });
+
+  function doughnut(canvasId, type, old) {
+    const cats = {};
+    records.filter(r=>r.type===type).forEach(r=>{ cats[r.cat]=(cats[r.cat]||0)+r.amount; });
+    const labels=Object.keys(cats), data=Object.values(cats);
+    if (old) old.destroy();
+    const colors=['#5DCAA5','#85B7EB','#F0997B','#7F77DD','#FAC775','#ED93B1','#97C459','#B4B2A9'];
+    return new Chart(document.getElementById(canvasId).getContext('2d'), {
+      type:'doughnut',
+      data:{ labels, datasets:[{ data, backgroundColor:colors.slice(0,labels.length), borderWidth:0 }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'right', labels:{ font:{size:11}, usePointStyle:true, pointStyle:'rect' } } } }
+    });
+  }
+  catIncomeChart = doughnut('catIncome','income',catIncomeChart);
+  catExpenseChart = doughnut('catExpense','expense',catExpenseChart);
+}
+
+function renderAll() {
+  renderMetrics('metrics-input');
+  renderMetrics('metrics-report');
+  renderList();
+}
+
+function showTab(name, btn) {
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  btn.classList.add('active');
+  if (name==='report') setTimeout(renderCharts, 60);
+}
+
+function exportCSV() {
+  const filtered = getFiltered();
+  if (!filtered.length) { alert('データがありません'); return; }
+  const header = '日付,種別,内容,カテゴリ,金額';
+  const rows = filtered.map(r=>`${r.date},${r.type==='income'?'売上':'仕入'},"${r.desc}","${r.cat}",${r.amount}`);
+  const blob = new Blob(['\uFEFF'+[header,...rows].join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='売上仕入管理_'+today()+'.csv'; a.click();
+}
+
+function importCSV(event) {
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.replace(/^\uFEFF/,'').split('\n').filter(l=>l.trim());
+    lines.shift();
+    let count=0;
+    lines.forEach(line => {
+      const parts = line.match(/(".*?"|[^,]+)(?=,|$)/g);
+      if (!parts||parts.length<5) return;
+      const date=parts[0].trim(), type=parts[1].trim()==='売上'?'income':'expense';
+      const desc=parts[2].replace(/^"|"$/g,'').trim(), cat=parts[3].replace(/^"|"$/g,'').trim()||'未分類';
+      const amount=parseInt(parts[4].trim())||0;
+      if (date&&desc&&amount>0) { records.push({id:Date.now()+Math.random(),date,type,desc,amount,cat}); count++; }
+    });
+    records.sort((a,b)=>b.date.localeCompare(a.date));
+    save(); renderAll();
+    alert(`${count}件インポートしました`);
+  };
+  reader.readAsText(file,'UTF-8');
+  event.target.value='';
+}
+
+// Init
+document.getElementById('inp-date').value = today();
+load();
+if (!records.length) {
+  records = [
+    {id:1,date:'2026-04-01',type:'income',desc:'商品A 販売',amount:50000,cat:'商品代'},
+    {id:2,date:'2026-04-05',type:'expense',desc:'原材料 仕入',amount:18000,cat:'材料費'},
+    {id:3,date:'2026-04-10',type:'income',desc:'サービスB 請求',amount:80000,cat:'サービス料'},
+    {id:4,date:'2026-04-15',type:'expense',desc:'送料',amount:3500,cat:'配送費'},
+    {id:5,date:'2026-03-20',type:'income',desc:'コンサルティング',amount:120000,cat:'サービス料'},
+    {id:6,date:'2026-03-10',type:'expense',desc:'消耗品購入',amount:8000,cat:'消耗品費'},
+  ];
+  save();
+}
+renderAll();
+</script>
+</body>
+</html>
