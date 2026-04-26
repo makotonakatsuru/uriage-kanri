@@ -2,17 +2,33 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-  <link rel="apple-touch-icon" href="icon.png">
-  <link rel="icon" type="image/png" href="icon.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="売上・経費管理">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" type="image/png" href="icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="売上・経費管理">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>売上・経費管理</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;background:#f5f5f5;color:#222}
 :root{--g:#1D9E75;--gl:#E1F5EE;--gd:#085041;--r:#E24B4A;--rl:#FCEBEB;--rd:#A32D2D;--b:#378ADD;--bl:#E6F1FB;--border:#e0e0e0;--bg:#fff;--bg2:#f7f7f7}
+
+/* 認証画面 */
+#auth-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;background:#fff}
+.auth-logo{font-size:36px;font-weight:700;color:var(--g);margin-bottom:6px}
+.auth-sub{font-size:13px;color:#aaa;margin-bottom:40px}
+.auth-box{width:100%;max-width:340px}
+.auth-field{margin-bottom:16px}
+.auth-field label{font-size:12px;color:#888;margin-bottom:5px;display:block;font-weight:500;letter-spacing:0.04em}
+.auth-field input{width:100%;font-size:16px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:#fff;color:#222;font-family:inherit;outline:none;-webkit-appearance:none}
+.auth-field input:focus{border-color:var(--g)}
+.auth-btn{width:100%;padding:14px;font-size:16px;border:none;border-radius:10px;background:var(--g);color:#fff;cursor:pointer;font-weight:600;font-family:inherit;margin-top:4px}
+.auth-err{font-size:13px;color:var(--r);text-align:center;margin-top:14px;min-height:18px}
+.auth-hint{font-size:11px;color:#ccc;text-align:center;margin-top:20px;line-height:1.6}
+
+/* アプリ本体 */
+#app-screen{display:none}
 .wrap{max-width:480px;margin:0 auto;background:#fff;min-height:100vh}
 .topbar{background:var(--g);padding:6px 16px 16px;position:sticky;top:0;z-index:100}
 .sumrow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 14px;border-bottom:1px solid var(--border)}
@@ -105,6 +121,24 @@ input[type=number]{-moz-appearance:textfield}
 </style>
 </head>
 <body>
+
+<!-- 認証画面 -->
+<div id="auth-screen">
+  <div class="auth-logo">⚡ 売上・経費管理</div>
+  <div class="auth-sub">あなただけの事業管理</div>
+  <div class="auth-box">
+    <div class="auth-field">
+      <label>パスワード</label>
+      <input type="password" id="login-pass" placeholder="パスワードを入力" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="auth-btn" onclick="doLogin()">ログイン</button>
+    <div class="auth-err" id="auth-err"></div>
+    <div class="auth-hint">初回は好きなパスワードを設定してください<br>次回から同じパスワードでログインできます</div>
+  </div>
+</div>
+
+<!-- アプリ本体 -->
+<div id="app-screen">
 <div class="wrap">
   <div class="topbar">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -125,10 +159,12 @@ input[type=number]{-moz-appearance:textfield}
 
   <div class="settings-overlay" id="settings-overlay" onclick="closeSettings()">
     <div class="settings-menu" onclick="event.stopPropagation()">
+      <div class="settings-item" onclick="changePassword();closeSettings()"><span class="settings-icon">🔑</span>パスワード変更</div>
       <div class="settings-item" onclick="openBudgetModal();closeSettings()"><span class="settings-icon">🎯</span>月間目標の設定</div>
       <div class="settings-item" onclick="exportCSV();closeSettings()"><span class="settings-icon">📤</span>CSVエクスポート</div>
       <div class="settings-item" onclick="document.getElementById('import-file').click();closeSettings()"><span class="settings-icon">📥</span>CSVインポート</div>
       <input type="file" id="import-file" accept=".csv" style="display:none" onchange="importCSV(event)">
+      <div class="settings-item danger" onclick="doLogout();closeSettings()"><span class="settings-icon">🚪</span>ログアウト</div>
       <div class="settings-item danger" onclick="resetData();closeSettings()"><span class="settings-icon">🗑️</span>データをリセット</div>
     </div>
   </div>
@@ -202,6 +238,7 @@ input[type=number]{-moz-appearance:textfield}
   </div>
   <div class="foot">売上・経費管理</div>
 </div>
+</div>
 
 <!-- 日付モーダル -->
 <div class="modal-overlay" id="day-modal" onclick="closeDayModal(event)">
@@ -270,29 +307,75 @@ input[type=number]{-moz-appearance:textfield}
 const EXP=['仕入','外注費','材料費','交通費','通信費','消耗品費','地代家賃','水道光熱費','接待交際費','保険料','税金・公課','その他経費'];
 const EXP_COLORS=['#E24B4A','#EF9F27','#D85A30','#D4537E','#7F77DD','#378ADD','#A32D2D','#854F0B','#993556','#534AB7','#185FA5','#712B13'];
 const STORE_KEY='uriage_data';
+const PASS_KEY='uriage_pass';
+const SESSION_KEY='uriage_session';
 
 let ct='inc',today=new Date(),vy=today.getFullYear(),vm=today.getMonth();
 let sel=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
 let data=[];
 
-// localStorage 読み書き
+// ===== 認証 =====
+function doLogin(){
+  let pass=document.getElementById('login-pass').value;
+  if(!pass){document.getElementById('auth-err').textContent='パスワードを入力してください';return;}
+  let saved=localStorage.getItem(PASS_KEY);
+  if(!saved){
+    // 初回：パスワード登録
+    if(pass.length<4){document.getElementById('auth-err').textContent='パスワードは4文字以上にしてください';return;}
+    localStorage.setItem(PASS_KEY,pass);
+    localStorage.setItem(SESSION_KEY,'1');
+    showApp();
+  } else {
+    if(pass===saved){
+      localStorage.setItem(SESSION_KEY,'1');
+      showApp();
+    } else {
+      document.getElementById('auth-err').textContent='パスワードが違います';
+      document.getElementById('login-pass').value='';
+    }
+  }
+}
+
+function doLogout(){
+  localStorage.removeItem(SESSION_KEY);
+  document.getElementById('app-screen').style.display='none';
+  document.getElementById('auth-screen').style.display='flex';
+  document.getElementById('login-pass').value='';
+  document.getElementById('auth-err').textContent='';
+}
+
+function changePassword(){
+  let cur=prompt('現在のパスワードを入力してください');
+  if(cur===null)return;
+  if(cur!==localStorage.getItem(PASS_KEY)){alert('パスワードが違います');return;}
+  let np=prompt('新しいパスワードを入力してください（4文字以上）');
+  if(!np||np.length<4){if(np!==null)alert('4文字以上にしてください');return;}
+  localStorage.setItem(PASS_KEY,np);
+  alert('パスワードを変更しました！');
+}
+
+function showApp(){
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('app-screen').style.display='block';
+  loadData();updateNoteHistory();setType('inc');setType2('inc');render();updateDateHint();
+}
+
+function tryAutoLogin(){
+  if(localStorage.getItem(SESSION_KEY)==='1'&&localStorage.getItem(PASS_KEY)){
+    showApp();
+  }
+}
+
+// ===== データ =====
 function loadData(){
   try{data=JSON.parse(localStorage.getItem(STORE_KEY)||'[]');}catch(e){data=[];}
 }
-function saveData(){
-  localStorage.setItem(STORE_KEY,JSON.stringify(data));
-}
+function saveData(){localStorage.setItem(STORE_KEY,JSON.stringify(data));}
 
 function fy(n){return '¥'+Math.abs(Math.round(n)).toLocaleString('ja-JP')}
 function fk(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
-
-function getMonthData(){
-  let p=vy+'-'+String(vm+1).padStart(2,'0')+'-';
-  return data.filter(e=>e.date.startsWith(p));
-}
-function getYearData(){
-  return data.filter(e=>e.date.startsWith(vy+'-'));
-}
+function getMonthData(){let p=vy+'-'+String(vm+1).padStart(2,'0')+'-';return data.filter(e=>e.date.startsWith(p));}
+function getYearData(){return data.filter(e=>e.date.startsWith(vy+'-'));}
 
 function updateDateHint(){
   if(!sel){document.getElementById('date-hint').textContent='↓ カレンダーで日付を選んでください';return;}
@@ -306,8 +389,7 @@ function addE(){
   if(!a||a<=0){alert('金額を入力してください');return}
   let c=ct==='inc'?'売上':document.getElementById('cs').value;
   let note=document.getElementById('note').value.trim()||null;
-  let entry={id:Date.now()+'_'+Math.random().toString(36).slice(2),date:sel,type:ct,category:c,amount:a,note};
-  data.push(entry);
+  data.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),date:sel,type:ct,category:c,amount:a,note});
   saveData();
   let nv=document.getElementById('note').value.trim();
   if(nv){let h=JSON.parse(localStorage.getItem('nh_um')||'[]');if(!h.includes(nv)){h.unshift(nv);if(h.length>50)h.pop();localStorage.setItem('nh_um',JSON.stringify(h));updateNoteHistory();}}
@@ -319,8 +401,8 @@ function addE2(){
   let a=parseInt(document.getElementById('ai2').value);if(!a||a<=0){alert('金額を入力してください');return}
   let c=ct2==='inc'?'売上':document.getElementById('cs2').value;
   let note=document.getElementById('note2').value.trim()||null;
-  let entry={id:Date.now()+'_'+Math.random().toString(36).slice(2),date:sel,type:ct2,category:c,amount:a,note};
-  data.push(entry);saveData();
+  data.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),date:sel,type:ct2,category:c,amount:a,note});
+  saveData();
   document.getElementById('ai2').value='';document.getElementById('note2').value='';
   document.getElementById('add-modal').classList.remove('show');render();
 }
@@ -345,7 +427,7 @@ function resetData(){
   data=[];saveData();render();
 }
 
-// 予算
+// ===== 予算 =====
 function getBudget(){return JSON.parse(localStorage.getItem('budget_um')||'{}')}
 function saveBudget(){
   let budget={};
@@ -372,7 +454,7 @@ function renderBudgetBars(){
   }).join('');
 }
 
-// CSV
+// ===== CSV =====
 function exportCSV(){
   let rows=[['日付','種別','カテゴリ','金額','備考（取引先）']];
   let sorted=[...data].sort((a,b)=>a.date<b.date?-1:1);
@@ -400,11 +482,11 @@ function importCSV(event){
   reader.readAsText(file,'UTF-8');event.target.value='';
 }
 
-// 設定メニュー
+// ===== 設定 =====
 function toggleSettings(){document.getElementById('settings-overlay').classList.toggle('show')}
 function closeSettings(){document.getElementById('settings-overlay').classList.remove('show')}
 
-// カテゴリ詳細
+// ===== カテゴリ詳細 =====
 function showCatDetail(category,type){
   let filtered=getMonthData().filter(e=>e.category===category&&e.type===type);if(!filtered.length)return;
   let total=filtered.reduce((s,e)=>s+e.amount,0);
@@ -419,7 +501,7 @@ function showCatDetail(category,type){
 }
 function closeModal(e){if(e.target===document.getElementById('cat-modal'))document.getElementById('cat-modal').classList.remove('show');}
 
-// 編集
+// ===== 編集 =====
 let editingId=null,editType='exp';
 function setEditType(t){
   editType=t;
@@ -448,7 +530,7 @@ function saveEdit(){
   saveData();document.getElementById('edit-modal').classList.remove('show');render();
 }
 
-// 入力タイプ切り替え
+// ===== 入力タイプ =====
 function setType(t){
   ct=t;
   document.getElementById('ib').className=t==='inc'?'ai':'';
@@ -467,12 +549,12 @@ function setType2(t){
   document.getElementById('note2').placeholder=t==='inc'?'取引先名（例：〇〇電設）':'備考（任意）';
 }
 
-// 祝日
+// ===== 祝日 =====
 const HOLIDAYS={'01-01':'元日','01-13':'成人の日','02-11':'建国記念の日','02-23':'天皇誕生日','03-20':'春分の日','04-29':'昭和の日','05-03':'憲法記念日','05-04':'みどりの日','05-05':'こどもの日','07-21':'海の日','08-11':'山の日','09-15':'敬老の日','09-23':'秋分の日','10-13':'スポーツの日','11-03':'文化の日','11-23':'勤労感謝の日'};
 function getHolidayName(y,m,d){return HOLIDAYS[String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')]||null;}
 function getDayColor(y,m,d){let dow=new Date(y,m,d).getDay();if(dow===0||getHolidayName(y,m,d))return '#E24B4A';if(dow===6)return '#378ADD';return '#222';}
 
-// カレンダー日付クリック
+// ===== カレンダークリック =====
 function clickDay(key,y,m,d){
   sel=key;updateDateHint();render();
   let de=data.filter(e=>e.date===key);
@@ -504,19 +586,11 @@ function clickDay(key,y,m,d){
   if(de.length>0){setTimeout(()=>document.getElementById('day-modal').classList.add('show'),300);}
 }
 function closeDayModal(e){if(e.target===document.getElementById('day-modal'))document.getElementById('day-modal').classList.remove('show');}
-
-function openAddModal(key,y,m,d){
-  let color=getDayColor(y,m,d);let isToday=y===today.getFullYear()&&m===today.getMonth()&&d===today.getDate();
-  let dateStr=isToday?'今日（'+(m+1)+'月'+d+'日）':(m+1)+'月'+d+'日';
-  document.getElementById('add-modal-title').innerHTML='記録を追加　<span style="font-size:16px;color:'+color+'">'+dateStr+'</span>';
-  document.getElementById('add-modal').classList.add('show');
-}
 function closeAddModal(e){if(e.target===document.getElementById('add-modal'))document.getElementById('add-modal').classList.remove('show');}
 
-// 円グラフ
+// ===== 円グラフ =====
 function drawPie(){
-  let md=getMonthData();
-  let filtered=md.filter(e=>e.type==='exp');let totals={};
+  let filtered=getMonthData().filter(e=>e.type==='exp');let totals={};
   filtered.forEach(e=>{totals[e.category]=(totals[e.category]||0)+e.amount});
   let ents=Object.entries(totals).sort((a,b)=>b[1]-a[1]);let total=ents.reduce((s,e)=>s+e[1],0);
   let cx=55,cy=55,r=48,ri=22;
@@ -539,7 +613,7 @@ function drawPie(){
   leg.innerHTML=ents.map((e,i)=>`<div class="leg-item" onclick="showCatDetail('${e[0]}','exp')" style="cursor:pointer"><div class="leg-dot" style="background:${EXP_COLORS[i%EXP_COLORS.length]}"></div><span class="leg-label">${e[0]}</span><span class="leg-pct">${Math.round(e[1]/total*100)}%</span></div><div class="leg-amt" onclick="showCatDetail('${e[0]}','exp')" style="cursor:pointer">${fy(e[1])}</div>`).join('');
 }
 
-// 月別推移グラフ
+// ===== 月別推移 =====
 function renderTrendChart(){
   let canvas=document.getElementById('trend-chart');if(!canvas)return;
   let ctx=canvas.getContext('2d');
@@ -565,7 +639,7 @@ function renderTrendChart(){
   ctx.fillStyle='#E24B4A';ctx.fillRect(pad.l+50,2,12,8);ctx.fillStyle='#444';ctx.fillText('経費',pad.l+64,10);
 }
 
-// 年間収支
+// ===== 年間収支 =====
 function renderAnnual(){
   document.getElementById('annual-year').textContent=vy+'年';
   let tbody=document.getElementById('annual-body');
@@ -604,14 +678,12 @@ function applySeasonBg(){
   document.querySelector('.topbar').style.background=grad;
 }
 
-// メインレンダリング
+// ===== メインレンダリング =====
 function render(){
   let md=getMonthData();
   document.getElementById('mlbl').textContent=(vm+1)+'月';
   document.getElementById('ylbl').textContent=vy+'年';
   applySeasonBg();
-
-  // 集計
   let inc=md.filter(e=>e.type==='inc').reduce((s,e)=>s+e.amount,0);
   let exp=md.filter(e=>e.type==='exp').reduce((s,e)=>s+e.amount,0);
   document.getElementById('si').textContent=fy(inc);
@@ -619,7 +691,6 @@ function render(){
   let bal=inc-exp;let sbe=document.getElementById('sb');
   sbe.textContent=(bal<0?'-':'')+fy(bal);sbe.className='sv '+(bal>=0?'b':'e');
 
-  // カレンダー
   let g=document.getElementById('grid');g.innerHTML='';
   let first=new Date(vy,vm,1).getDay();let dim=new Date(vy,vm+1,0).getDate();let prev=new Date(vy,vm,0).getDate();
   let cells=[];
@@ -636,14 +707,10 @@ function render(){
     dn.className='cn'+(dow===0||hname?' sun':dow===6?' sat':'')+(isTod?' tod':'');
     dn.textContent=cd;div.appendChild(dn);
     if(hname){let hl=document.createElement('div');hl.style.cssText='font-size:7px;color:var(--r);line-height:1.1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 1px';hl.textContent=hname;div.appendChild(hl);}
-    if(c.cur){
-      let _k=key,_y=cy2,_m=cm,_d=cd;
-      div.onclick=function(){clickDay(_k,_y,_m,_d)};
-    }
+    if(c.cur){let _k=key,_y=cy2,_m=cm,_d=cd;div.onclick=function(){clickDay(_k,_y,_m,_d)};}
     g.appendChild(div);
   });
 
-  // 選択日の記録
   let list=document.getElementById('elist');
   if(!sel){list.innerHTML='<div class="em">日付を選んでください</div>';return;}
   let de=data.filter(e=>e.date===sel);
@@ -668,8 +735,9 @@ document.getElementById('next-year').onclick=function(){vy++;sel=null;updateDate
 // スワイプ
 (function(){
   let startX=0,startY=0;
-  document.querySelector('.wrap').addEventListener('touchstart',function(e){startX=e.touches[0].clientX;startY=e.touches[0].clientY;},{passive:true});
-  document.querySelector('.wrap').addEventListener('touchend',function(e){
+  document.addEventListener('touchstart',function(e){startX=e.touches[0].clientX;startY=e.touches[0].clientY;},{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(document.getElementById('app-screen').style.display==='none')return;
     let dx=e.changedTouches[0].clientX-startX;let dy=e.changedTouches[0].clientY-startY;
     if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>50){
       if(dx<0){vm++;if(vm>11){vm=0;vy++;}}else{vm--;if(vm<0){vm=11;vy--;}}
@@ -678,8 +746,8 @@ document.getElementById('next-year').onclick=function(){vy++;sel=null;updateDate
   },{passive:true});
 })();
 
-// 初期化
-loadData();updateNoteHistory();setType('inc');setType2('inc');render();updateDateHint();
+// 起動
+tryAutoLogin();
 </script>
 </body>
 </html>
