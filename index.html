@@ -465,12 +465,12 @@ function exportCSV(){
 }
 // やよいカテゴリ→アプリカテゴリ変換
 const YAYOI_CAT_MAP={
-  '売上':'売上','外注工賃':'外注費','外注費':'外注費',
-  '仕入':'仕入','材料費':'材料費','旅費交通費':'交通費','車両費':'交通費','交通費':'交通費',
-  '通信費':'通信費','消耗品費':'消耗品費','地代家賃':'地代家賃',
-  '水道光熱費':'水道光熱費','接待交際費':'接待交際費','保険料':'保険料',
-  '租税公課':'税金・公課','税金・公課':'税金・公課','新聞図書費':'消耗品費',
-  '福利厚生費':'その他経費','雑費':'その他経費','給料賃金':'その他経費',
+  '外注工賃':'外注費','外注費':'外注費','仕入':'仕入','材料費':'材料費',
+  '旅費交通費':'交通費','車両費':'交通費','通信費':'通信費',
+  '消耗品費':'消耗品費','地代家賃':'地代家賃','水道光熱費':'水道光熱費',
+  '接待交際費':'接待交際費','保険料':'保険料','租税公課':'税金・公課',
+  '新聞図書費':'消耗品費','福利厚生費':'その他経費','雑費':'その他経費',
+  '給料賃金':'その他経費','減価償却費':'その他経費',
 };
 function parseCSVLine(line){
   let result=[];let cur='';let inQ=false;
@@ -489,44 +489,47 @@ function importCSV(event){
     let text=e.target.result;
     if(text.charCodeAt(0)===0xFEFF)text=text.slice(1);
     let lines=text.split('\n').filter(l=>l.trim());
-    if(lines.length<2){alert('データがありません');return;}
-    let header=parseCSVLine(lines[0]);
-    // やよい形式を検出（"取引日"列があるか）
-    let isYayoi=header.includes('取引日')||header.includes('取引分類');
+    if(!lines.length){alert('データがありません');return;}
+    let firstCols=parseCSVLine(lines[0]);
+    // やよい形式判定：1列目が数字コード（"2000"など）かヘッダーか
+    let isYayoiOnline=!isNaN(parseInt(firstCols[0]));
     let imported=0;
-    if(isYayoi){
-      // やよい形式: No,取引日,取引番号,取引分類,科目,摘要,取引先(請求書区分),取引手段,税率,金額
-      let idxDate=header.findIndex(h=>h.includes('取引日'));
-      let idxType=header.findIndex(h=>h.includes('取引分類'));
-      let idxCat=header.findIndex(h=>h==='科目');
-      let idxNote=header.findIndex(h=>h.includes('取引先'));
-      let idxAmt=header.findIndex(h=>h==='金額');
-      lines.slice(1).forEach(line=>{
-        let cols=parseCSVLine(line);if(cols.length<3)return;
-        let date=(cols[idxDate]||'').replace(/\//g,'-').trim();
-        let typeRaw=(cols[idxType]||'').trim();
-        let catRaw=(cols[idxCat]||'').trim();
-        let noteRaw=(cols[idxNote]||'').trim();
-        let amtRaw=(cols[idxAmt]||'').replace(/,/g,'').trim();
-        let amount=parseInt(amtRaw);
-        if(!date||!amount||isNaN(amount))return;
-        // 取引分類で売上・経費・仕入を判定
-        let type='exp';
-        if(typeRaw==='売上')type='inc';
-        else if(typeRaw==='仕入')type='exp';
-        else if(typeRaw==='経費')type='exp';
-        // カテゴリ変換
-        let category=type==='inc'?'売上':(YAYOI_CAT_MAP[catRaw]||catRaw||'その他経費');
-        // 取引先から（適格）などを除去
-        let note=noteRaw.replace(/（適格）|（不適格）|\(適格\)|\(不適格\)/g,'').trim()||null;
-        data.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),date,type,category,amount,note});
-        imported++;
+    if(isYayoiOnline){
+      // やよいオンラインエクスポート形式（ヘッダーなし）
+      // 列: 0=コード, 3=日付, 4=借方科目, 8=借方金額, 10=貸方科目, 14=貸方金額, 25=借方取引先, 26=貸方取引先
+      lines.forEach(line=>{
+        let cols=parseCSVLine(line);if(cols.length<10)return;
+        let date=(cols[3]||'').replace(/\//g,'-').trim();
+        let debitCat=(cols[4]||'').trim();   // 借方科目
+        let debitAmt=parseInt((cols[8]||'0').replace(/,/g,''));
+        let creditCat=(cols[10]||'').trim(); // 貸方科目
+        let creditAmt=parseInt((cols[14]||'0').replace(/,/g,''));
+        let debitNote=(cols[25]||'').trim(); // 借方取引先
+        let creditNote=(cols[26]||'').trim();// 貸方取引先
+        if(!date)return;
+        // 売上判定：貸方科目が「売上」
+        if(creditCat==='売上'&&creditAmt>0){
+          let note=creditNote.replace(/（適格）|（不適格）/g,'').trim()||debitNote.replace(/（適格）|（不適格）/g,'').trim()||null;
+          data.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),date,type:'inc',category:'売上',amount:creditAmt,note});
+          imported++;
+        }
+        // 経費・仕入判定：借方科目が費用系
+        else if(debitCat&&debitCat!=='普通預金'&&debitCat!=='現金'&&debitCat!=='受取報酬の源泉徴収税'&&debitAmt>0){
+          let category=YAYOI_CAT_MAP[debitCat]||debitCat||'その他経費';
+          let note=debitNote.replace(/（適格）|（不適格）/g,'').trim()||null;
+          data.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),date,type:'exp',category,amount:debitAmt,note});
+          imported++;
+        }
       });
     }else{
-      // 通常形式: 日付,種別,カテゴリ,金額,備考
-      lines.slice(1).forEach(line=>{
+      // 通常形式（アプリ独自CSV）: 日付,種別,カテゴリ,金額,備考
+      let startIdx=firstCols.includes('日付')?1:0;
+      lines.slice(startIdx).forEach(line=>{
         let cols=parseCSVLine(line);
-        let date=cols[0],type=cols[1]==='売上'?'inc':'exp',category=cols[2]||(type==='inc'?'売上':'その他経費'),amount=parseInt((cols[3]||'').replace(/,/g,'')),note=cols[4]||null;
+        let date=cols[0],type=cols[1]==='売上'?'inc':'exp';
+        let category=cols[2]||(type==='inc'?'売上':'その他経費');
+        let amount=parseInt((cols[3]||'').replace(/,/g,''));
+        let note=cols[4]||null;
         if(!date||!amount||isNaN(amount))return;
         data.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),date,type,category,amount,note:note||null});imported++;
       });
@@ -534,18 +537,54 @@ function importCSV(event){
     saveData();render();alert(imported+'件インポートしました');
   };
   // Shift-JIS / UTF-8 両対応
-  let tryEncodings=['Shift_JIS','UTF-8'];
-  let tryIdx=0;
+  let tryEncodings=['UTF-8','Shift_JIS'];let tryIdx=0;
   function tryRead(){
     reader=new FileReader();
     reader.onload=function(e){
       let text=e.target.result;
       if(text.charCodeAt(0)===0xFEFF)text=text.slice(1);
-      // 文字化けチェック：「取引」が含まれていればOK
-      if(text.indexOf('取引')<0&&tryIdx<tryEncodings.length-1){
+      if(text.indexOf('取引')<0&&text.indexOf('2026')<0&&tryIdx<tryEncodings.length-1){
         tryIdx++;tryRead();return;
       }
-      processCSV(text);
+      // process
+      let lines2=text.split('\n').filter(l=>l.trim());
+      if(!lines2.length){alert('データがありません');return;}
+      let fc=parseCSVLine(lines2[0]);
+      let isYayoi=!isNaN(parseInt(fc[0]));
+      let imp=0;
+      if(isYayoi){
+        lines2.forEach(line=>{
+          let cols=parseCSVLine(line);if(cols.length<10)return;
+          let date=(cols[3]||'').replace(/\//g,'-').trim();
+          let debitCat=(cols[4]||'').trim();
+          let debitAmt=parseInt((cols[8]||'0').replace(/,/g,''));
+          let creditCat=(cols[10]||'').trim();
+          let creditAmt=parseInt((cols[14]||'0').replace(/,/g,''));
+          let debitNote=(cols[25]||'').trim();
+          let creditNote=(cols[26]||'').trim();
+          if(!date)return;
+          if(creditCat==='売上'&&creditAmt>0){
+            let note=creditNote.replace(/（適格）|（不適格）/g,'').trim()||debitNote.replace(/（適格）|（不適格）/g,'').trim()||null;
+            data.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),date,type:'inc',category:'売上',amount:creditAmt,note});imp++;
+          }else if(debitCat&&debitCat!=='普通預金'&&debitCat!=='現金'&&debitCat!=='受取報酬の源泉徴収税'&&debitAmt>0){
+            let category=YAYOI_CAT_MAP[debitCat]||debitCat||'その他経費';
+            let note=debitNote.replace(/（適格）|（不適格）/g,'').trim()||null;
+            data.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),date,type:'exp',category,amount:debitAmt,note});imp++;
+          }
+        });
+      }else{
+        let si=fc.includes('日付')?1:0;
+        lines2.slice(si).forEach(line=>{
+          let cols=parseCSVLine(line);
+          let date=cols[0],type=cols[1]==='売上'?'inc':'exp';
+          let category=cols[2]||(type==='inc'?'売上':'その他経費');
+          let amount=parseInt((cols[3]||'').replace(/,/g,''));
+          let note=cols[4]||null;
+          if(!date||!amount||isNaN(amount))return;
+          data.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),date,type,category,amount,note:note||null});imp++;
+        });
+      }
+      saveData();render();alert(imp+'件インポートしました');
     };
     reader.readAsText(file,tryEncodings[tryIdx]);
   }
