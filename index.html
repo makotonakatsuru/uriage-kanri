@@ -537,7 +537,7 @@ function importCSV(event){
     saveData();render();alert(imported+'件インポートしました');
   };
   // Shift-JIS / UTF-8 両対応
-  let tryEncodings=['UTF-8','Shift_JIS'];let tryIdx=0;
+  let tryEncodings=['Shift_JIS','UTF-8'];let tryIdx=0;
   function tryRead(){
     reader=new FileReader();
     reader.onload=function(e){
