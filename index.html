@@ -750,6 +750,33 @@ function renderTrendChart(){
 }
 
 // ===== 年間収支 =====
+function showMonthDetail(year,month,type){
+  let prefix=year+'-'+String(month+1).padStart(2,'0')+'-';
+  let md=data.filter(e=>e.date.startsWith(prefix)&&e.type===type);
+  if(!md.length)return;
+  let total=md.reduce((s,e)=>s+e.amount,0);
+  let color=type==='inc'?'var(--g)':'var(--r)';
+  let sign=type==='inc'?'+':'-';
+  let label=type==='inc'?'売上':'経費';
+  document.getElementById('modal-title').textContent=year+'年'+(month+1)+'月の'+label+'明細';
+  document.getElementById('modal-total').textContent=sign+fy(total);
+  document.getElementById('modal-total').style.color=color;
+  // 取引先・カテゴリ別に集計
+  let groups={};
+  md.forEach(e=>{
+    let key=type==='inc'?(e.note||'取引先不明'):(e.category+(e.note?'：'+e.note:''));
+    if(!groups[key])groups[key]=0;
+    groups[key]+=e.amount;
+  });
+  let entries=Object.entries(groups).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('modal-body').innerHTML=
+    entries.map(([name,amt])=>`<div class="modal-item">
+      <span style="font-size:14px;color:#222;flex:1">${name}</span>
+      <span class="modal-amt" style="color:${color}">${sign}${fy(amt)}</span>
+    </div>`).join('');
+  document.getElementById('cat-modal').classList.add('show');
+}
+
 function renderAnnual(){
   document.getElementById('annual-year').textContent=vy+'年';
   let tbody=document.getElementById('annual-body');
@@ -767,7 +794,9 @@ function renderAnnual(){
       cumInc+=mInc;cumExp+=mExp;let mBal=mInc-mExp;
       let mRate=mInc>0?Math.round(mExp/mInc*100):'-';
       let mRateClass=typeof mRate==='number'?(mRate>=100?'bal-neg':mRate>=90?'exp-val':mRate>=80?'warn-val':'inc-val'):'';
-      rows+=`<tr class="${isCurrent?'current-month':''}"><td>${m+1}月</td><td class="inc-val">${mInc>0?fy(mInc):'-'}</td><td class="exp-val">${mExp>0?fy(mExp):'-'}</td><td class="${mRateClass}">${typeof mRate==='number'?mRate+'%':'-'}</td><td class="${mBal>=0?'bal-pos':'bal-neg'}">${mInc===0&&mExp===0?'-':(mBal>=0?'+':'-')+fy(Math.abs(mBal))}</td></tr>`;
+      let incCell=mInc>0?`<td class="inc-val" onclick="showMonthDetail(${vy},${m},'inc')" style="cursor:pointer;text-decoration:underline dotted">${fy(mInc)}</td>`:`<td>-</td>`;
+      let expCell=mExp>0?`<td class="exp-val" onclick="showMonthDetail(${vy},${m},'exp')" style="cursor:pointer;text-decoration:underline dotted">${fy(mExp)}</td>`:`<td>-</td>`;
+      rows+=`<tr class="${isCurrent?'current-month':''}""><td>${m+1}月</td>${incCell}${expCell}<td class="${mRateClass}">${typeof mRate==='number'?mRate+'%':'-'}</td><td class="${mBal>=0?'bal-pos':'bal-neg'}">${mInc===0&&mExp===0?'-':(mBal>=0?'+':'-')+fy(Math.abs(mBal))}</td></tr>`;
     }
   }
   let cumBal=cumInc-cumExp;let cumRate=cumInc>0?Math.round(cumExp/cumInc*100):0;
